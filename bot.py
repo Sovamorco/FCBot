@@ -20,7 +20,7 @@ async def on_ready():
     print(f'Logged in as {fcbot.group.name}')
 
 
-@fcbot.check()
+@fcbot.check
 async def roles_check(ctx):
     if not ctx.command:
         return True
@@ -35,7 +35,7 @@ async def roles_check(ctx):
     return await prof.solve_role(ctx, ctx.command.allowed_roles)
 
 
-@fcbot.check()
+@fcbot.check
 async def chat_check(ctx):
     if ctx.peer_id not in chatlist and ctx.from_id not in basically_gods:
         await ctx.send('Команды можно использовать только в беседах [club151434682|Фандомной Кафешки]!')
