@@ -7,9 +7,13 @@ art_regex = r'photo-?[0-9]+_[0-9]+'
 doc_regex = r'doc-?[0-9]+_[0-9]+'
 vk_id_regex = r'(?:https?:\/\/)?(?:www\.)?(?:m\.)?vk.com\/([^\n ]+)|\[id([0-9]+)\|.+]'
 
+admin_chat = 2000000001
+
 nobody = 605829137
-basically_gods = [nobody]
-chatlist = basically_gods
+mylove = 576971572
+yuri = 444055684
+basically_gods = [nobody, mylove, yuri]
+chatlist = [admin_chat]
 
 role_scopes = {
     'программист': False,

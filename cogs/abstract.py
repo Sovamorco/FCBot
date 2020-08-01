@@ -25,6 +25,7 @@ async def abstract_sql(query, *params, fetch=False, fetchall=False, last_row=Fal
     return r
 
 
+# noinspection SqlResolve
 async def abstract_fetch(fetch_all, table, keys=None, keys_values=None, fields=None,
                          raw_keys='', order_by=None, order_desc=False, limit=None, schema=None, matches_all=True):
     if keys_values is None:

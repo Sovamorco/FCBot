@@ -1,7 +1,9 @@
+import os
 from json import dumps
 from random import randint
 from typing import List
 
+import git
 import regex as re
 import vk_botting
 from vk_botting import Bot, BadArgument, Command, when_mentioned_or_pm_or, ConversionError
@@ -231,6 +233,41 @@ class FCBot(Bot):
         await abstract_sql('INSERT INTO albums (art, owner, album) VALUES (%s, %s, %s)', art, owner, album)
         self.album_converter[art] = [owner, album]
 
+    @staticmethod
+    def get_new_commits():
+        repo = git.Repo(os.getcwd())
+        commits = repo.iter_commits(repo.active_branch)
+        last_hex = get_last_commit()
+        new_commits = []
+        for commit in commits:
+            if commit.hexsha == last_hex:
+                break
+            else:
+                new_commits.append(commit)
+        reset_last_commit(new_commits)
+        return new_commits
+
+    async def send_update_message(self):
+        new = self.get_new_commits()
+        if not new:
+            await self.send_message(admin_chat, 'Бот запущен')
+        else:
+            ans = 'Бот обновлен.'
+            if len(new) == 1:
+                ans += f'\nТекст последнего обновления:'
+            else:
+                ans += f'\nОбновлений - {len(new)}'
+                if len(new) > 5:
+                    ans += '\nТексты последних пяти обновлений:'
+                else:
+                    ans += '\nТексты обновлений:'
+            for commit in new[:5]:
+                ans += f'\n\n--->{commit.message.strip()}'
+            lines, insertions, deletions = zip(*[(comm.stats.total['lines'], comm.stats.total['insertions'], comm.stats.total['deletions']) for comm in new])
+            lines, insertions, deletions = sum(lines), sum(insertions), sum(deletions)
+            ans += f'\n\nИзмененных строк: {lines} (+{insertions}/-{deletions})'
+            await self.send_message(admin_chat, ans, attachment=await self.get_random_art('update'))
+
 
 class FCommand(Command):
     def __init__(self, *args, **kwargs):
@@ -254,6 +291,18 @@ async def log_message(dt, peer_id, user_id, msg):
 async def log_error(msg, error):
     msg = dumps(msg)
     await abstract_sql('INSERT INTO `errors` (message, error) VALUES (%s, %s)', msg, error)
+
+
+def get_last_commit():
+    try:
+        return open('resources/latestcommit', 'r').read()
+    except FileNotFoundError:
+        return ''
+
+
+def reset_last_commit(new_commits):
+    if new_commits:
+        open('resources/latestcommit', 'w+').write(new_commits[0].hexsha)
 
 
 def command(*args, **kwargs):

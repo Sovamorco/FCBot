@@ -16,10 +16,11 @@ async def on_ready():
     await inject_callbacks()
     await fcbot.refresh_albums()
     await fcbot.attach_user_token(vk_personal_audio_token)
+    await fcbot.send_update_message()
     print(f'Logged in as {fcbot.group.name}')
 
 
-@fcbot.check
+@fcbot.check()
 async def roles_check(ctx):
     if not ctx.command:
         return True
@@ -32,6 +33,14 @@ async def roles_check(ctx):
     except ProfileNotCreatedError:
         return False
     return await prof.solve_role(ctx, ctx.command.allowed_roles)
+
+
+@fcbot.check()
+async def chat_check(ctx):
+    if ctx.peer_id not in chatlist and ctx.from_id not in basically_gods:
+        await ctx.send('Команды можно использовать только в беседах [club151434682|Фандомной Кафешки]!')
+        return False
+    return True
 
 
 @fcbot.listen()
@@ -63,9 +72,9 @@ async def on_command_error(ctx, error):
         traceback.print_exception(type(error), error, error.__traceback__)
         await log_error(ctx.message.original_data, ''.join(traceback.format_exception(type(error), error, error.__traceback__)))
         if len(str(error.original)) < 200 and 'access_token' not in str(error.original):
-            await ctx.send(f'Ошибка:\n{error.original}\n[id605829137|_]')
+            await ctx.send(f'Ошибка:\n{error.original}\n[id{nobody}|_]')
         else:
-            await ctx.send(f'Ошибка (подробнее в логах)\n[id605829137|_]')
+            await ctx.send(f'Ошибка (подробнее в логах)\n[id{nobody}|_]')
         for prof in profiles_cache:
             await profiles_cache[prof].dump()
 
