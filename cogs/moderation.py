@@ -216,8 +216,7 @@ class Moderation(Cog):
         if not comm:
             return await ctx.send('Список команд (это временная помощь, не волнуйтесь):\n' + '\n'.join([comm.name for comm in sorted(fcbot.commands, key=lambda x: x.name)]))
         res = await CommandConverter().convert(ctx, comm)
-        pref = await fcbot.get_prefix(ctx.message)
-        return await ctx.send(f'Команда "{res.name}":\nИспользование: {pref}{res.usage}\n\nПомощь: "{res.help}"')
+        return await ctx.send(f'Команда "{res.name}":\nИспользование: {ctx.prefix}{res.usage}\n\nПомощь: "{res.help}"')
 
 
 def moderation_setup(bot):
