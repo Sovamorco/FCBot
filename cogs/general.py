@@ -432,7 +432,7 @@ async def inject_callbacks():
 
 
 class CommandConverter(Converter):
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx, argument) -> FCommand:
         value = argument.lower()
         for comm in fcbot.walk_commands():
             if value in [comm.name] + comm.aliases:

@@ -115,7 +115,15 @@ class Moderation(Cog):
             return await ctx.send('У пользователя нет этой роли!')
         return await ctx.send('Готово!')
 
-    @command(name='+команда', usage='+команда <название> <арт> <текст>', allowed_roles=True)
+    @command(name='+команда', usage='+команда <название> <арт> <текст>', allowed_roles=True,
+             help='Команда для добавления команд\nВ тексте {ment} автоматически заменяется на упоминание отправителя, '
+                  'а {msg} на текст который он написал после команды (замены использовать не обязательно)\nЕсли название необходимо указать с пробелом, '
+                  'оно должно быть в кавычках\nВ поле <арт> надо указать код для артов '
+                  '(любое слово, если у нескольких команд код совпадает то у них будет общий набор артов)'
+                  '\nПримеры использования:\n1. +команда кусь кусь {ment} укусил {msg}!\n'
+                  '2. +команда "подарить шоколадку" шоколад {ment} подарил шоколадку {msg}!\n'
+                  '3. +команда депрессия депрессия {ment} ушел в депрессию...'
+                  '4. +команда "дай неко" неко Держи неко!')
     async def add_command(self, ctx, name, art, *, text):
         name = name.lower()
         art = art.lower()
@@ -125,7 +133,10 @@ class Moderation(Cog):
         res.inject()
         return await ctx.send('Готово!')
 
-    @command(name='+название', usage='+название <команда> <название>', allowed_roles=True)
+    @command(name='+название', usage='+название <команда> <название>', allowed_roles=True,
+             help='Команда для добавления альтернативного названия команде, добавленной с помощью "+команда"\n'
+                  'Пример: +название кусь укусить\n'
+                  'После этого команду "кусь" можно будет так же использовать с помощью "укусить"')
     async def add_alias(self, ctx, comm: CommandConverter(), *, name):
         if not comm.callback_instance:
             return await ctx.send('Этой команде нельзя добавлять названия')
@@ -134,7 +145,8 @@ class Moderation(Cog):
             return await ctx.send('Готово!')
         return await ctx.send('Это название уже занято!')
 
-    @command(name='-команда', usage='-команда <команда>', allowed_roles=True)
+    @command(name='-команда', usage='-команда <команда>', allowed_roles=True,
+             help='Команда для удаления команд добавленных с помощью "+команда"')
     async def remove_command(self, ctx, *, comm: CommandConverter()):
         if not comm.callback_instance:
             return await ctx.send('Эту команду нельзя удалить')
@@ -197,6 +209,15 @@ class Moderation(Cog):
         albums = await self.bot.get_albums()
         res = [(k, albums[k]) for k in sorted(albums, key=lambda x: (albums[x], x))]
         return await ctx.send('Количество артов различных команд:\n' + '\n'.join([f'{art[0]} - {art[1]}' for art in res]))
+
+    @command(name='помощь', aliases=['команды'], allowed_roles=True,
+             usage='помощь [команда]', help='Если ты читаешь это сообщение, то, думаю, ты понимаешь для чего эта команда')
+    async def help(self, ctx, *, comm=''):
+        if not comm:
+            return await ctx.send('Список команд (это временная помощь, не волнуйтесь):\n' + '\n'.join([comm.name for comm in sorted(fcbot.commands, key=lambda x: x.name)]))
+        res = await CommandConverter().convert(ctx, comm)
+        pref = await fcbot.get_prefix(ctx.message)
+        return await ctx.send(f'Команда "{res.name}":\nИспользование: {pref}{res.usage}\n\nПомощь: "{res.help}"')
 
 
 def moderation_setup(bot):
