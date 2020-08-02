@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from json import dumps
 from random import randint
 from typing import List
@@ -6,7 +7,7 @@ from typing import List
 import git
 import regex as re
 import vk_botting
-from vk_botting import Bot, BadArgument, Command, when_mentioned_or_pm_or, ConversionError
+from vk_botting import Bot, BadArgument, Command, when_mentioned_or_pm_or
 from vk_botting.conversions import Converter
 
 from cogs.abstract import *
@@ -35,7 +36,7 @@ class FCMember(AbstractSQLObject):
             return profiles_cache[uid]
         res = await cls.select(uid)
         if not res:
-            raise ProfileNotCreatedError(f'Профиль пользователя {uid} не создан!')
+            raise ProfileNotCreatedError(answers['warnings']['profile_not_created'].format(uid))
         if uid in profiles_cache:
             return profiles_cache[uid]
         profiles_cache[uid] = res
@@ -76,6 +77,64 @@ class FCMember(AbstractSQLObject):
         scope = chat_id * role_scopes[role]
         await abstract_sql('DELETE FROM roles WHERE id=%s AND role=%s AND scope=%s', self.id, role, scope)
         return True
+
+    @property
+    def warnings_limit(self):
+        return 3
+
+    async def get_warnings(self, chat_id):
+        res = await abstract_fetch(True, 'warnings', ['chat', 'user'], [chat_id, self.id])
+        return res
+
+    async def get_warnings_count(self, chat_id):
+        res = await self.get_warnings(chat_id)
+        return len(res)
+
+    async def add_warning(self, admin_id, chat_id):
+        await abstract_sql('INSERT INTO warnings (chat, user, admin, datetime) VALUES (%s, %s, %s, %s)', chat_id, self.id, admin_id, datetime.now())
+        count = await self.get_warnings_count(chat_id)
+        if count >= self.warnings_limit:
+            return True
+        return False
+
+    async def remove_warning(self, chat_id):
+        warnings = await self.get_warnings(chat_id)
+        if not warnings:
+            return False
+        oldest = min(warnings, key=lambda x: x['datetime'])
+        await abstract_sql('DELETE FROM warnings WHERE some_id=%s', oldest['some_id'])
+        return True
+
+    async def remove_all_warnings(self, chat_id):
+        await abstract_sql('DELETE FROM warnings WHERE user=%s AND chat=%s', self.id, chat_id)
+
+    async def get_family(self):
+        res = await abstract_sql('SELECT * FROM families WHERE state=1 AND (first=%s OR second=%s)', self.id, self.id)
+        if res:
+            return Family(self.id, res)
+        return None
+
+    async def get_incoming_request(self):
+        return await abstract_fetch(False, 'families', ['second', 'state'], [self.id, 0])
+
+    async def get_outgoing_request(self):
+        return await abstract_fetch(False, 'families', ['first', 'state'], [self.id, 0])
+
+
+class Family:
+    def __init__(self, mc, data):
+        self.id = data['id']
+        self.self = mc
+        self.pair = data['first'] if data['first'] != mc else data['second']
+        self.state = data['state']
+
+    async def get_children(self):
+        res = await abstract_fetch(True, 'children', ['family', 'state'], [self.id, 1])
+        return [await FCMember.load(child['child']) for child in res]
+
+    async def get_pending_children(self):
+        res = await abstract_fetch(True, 'children', ['family', 'state'], [self.id, 0])
+        return [await FCMember.load(child['child']) for child in res]
 
 
 class FCBot(Bot):
@@ -130,7 +189,7 @@ class FCBot(Bot):
         if 'response' in chat.keys() and chat['response']['items'] and 'pinned_message' in chat['response']['items'][0]['chat_settings']:
             ans = '\n' + chat['response']['items'][0]['chat_settings']['pinned_message']['text']
         else:
-            ans = 'Добро пожаловать'
+            ans = answers['misc']['greeting']
         return ans
 
     async def create_album(self, title, description):
@@ -250,22 +309,22 @@ class FCBot(Bot):
     async def send_update_message(self):
         new = self.get_new_commits()
         if not new:
-            await self.send_message(admin_chat, 'Бот запущен')
+            await self.send_message(admin_chat, answers['misc']['bot_launched'])
         else:
-            ans = 'Бот обновлен.'
+            ans = answers['misc']['bot_updated']['main']
             if len(new) == 1:
-                ans += f'\nТекст последнего обновления:'
+                ans += answers['misc']['bot_updated']['one_update']
             else:
-                ans += f'\nОбновлений - {len(new)}'
+                ans += answers['misc']['bot_updated']['multiple_updates'].format(len(new))
                 if len(new) > 5:
-                    ans += '\nТексты последних пяти обновлений:'
+                    ans += answers['misc']['bot_updated']['more_than_five']
                 else:
-                    ans += '\nТексты обновлений:'
+                    ans += answers['misc']['bot_updated']['less_than_five']
             for commit in new[:5]:
-                ans += f'\n\n--->{commit.message.strip()}'
+                ans += answers['misc']['bot_updated']['commit'].format(commit.message.strip())
             lines, insertions, deletions = zip(*[(comm.stats.total['lines'], comm.stats.total['insertions'], comm.stats.total['deletions']) for comm in new])
             lines, insertions, deletions = sum(lines), sum(insertions), sum(deletions)
-            ans += f'\n\nИзмененных строк: {lines} (+{insertions}/-{deletions})'
+            ans += answers['misc']['bot_updated']['lines'].format(lines, insertions, deletions)
             await self.send_message(admin_chat, ans, attachment=await self.get_random_art('update'))
 
 
@@ -343,7 +402,15 @@ def role_converter(arg: str):
         for alias in roles_conv[role]:
             if arg.startswith(alias):
                 return role
-    return None
+    raise FConversionError(answers['warnings']['wrong_role'])
+
+
+def command_converter(argument) -> FCommand:
+    value = argument.lower()
+    for comm in fcbot.walk_commands():
+        if value in [comm.name] + comm.aliases:
+            return comm
+    raise FConversionError(answers['warnings']['wrong_command'])
 
 
 class CallbackCommand:
@@ -431,15 +498,5 @@ async def inject_callbacks():
         callback.inject()
 
 
-class CommandConverter(Converter):
-    async def convert(self, ctx, argument) -> FCommand:
-        value = argument.lower()
-        for comm in fcbot.walk_commands():
-            if value in [comm.name] + comm.aliases:
-                return comm
-        await ctx.send('Нет команды с таким названием!')
-        raise ConversionError
-
-
-fcbot = FCBot(when_mentioned_or_pm_or('!'), case_insensitive=True)
+fcbot = FCBot(when_mentioned_or_pm_or('!'), case_insensitive=True, force=True)
 profiles_cache = AbstractCacheManager(fcbot.loop, 900)

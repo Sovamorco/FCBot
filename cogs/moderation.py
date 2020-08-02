@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import aiohttp
 from vk_botting import Cog, Photo
 
@@ -7,10 +5,8 @@ from cogs.general import *
 
 
 class Moderation(Cog):
-    def __init__(self, bot: FCBot):
-        self.bot = bot
-
-    async def upload_photo(self, server, *urls):
+    @staticmethod
+    async def upload_photo(server, *urls):
         try:
             async with aiohttp.ClientSession() as client:
                 files = aiohttp.FormData()
@@ -29,7 +25,7 @@ class Moderation(Cog):
                 'photos_list': photos['photos_list'],
                 'hash': photos['hash']
             }
-            res = await self.bot.user_vk_request('photos.save', **payload)
+            res = await fcbot.user_vk_request('photos.save', **payload)
             uploaded = res['response']
             return [f'photo{file["owner_id"]}_{file["id"]}' for file in uploaded]
         except Exception:
@@ -38,8 +34,8 @@ class Moderation(Cog):
     async def upload_photos(self, comm, *atts):
         if not atts or not any(isinstance(att, Photo) for att in atts):
             return None
-        oid, aid = self.bot.album_converter[comm]
-        server = await self.bot.user_vk_request('photos.getUploadServer', group_id=-oid, album_id=aid)
+        oid, aid = fcbot.album_converter[comm]
+        server = await fcbot.user_vk_request('photos.getUploadServer', group_id=-oid, album_id=aid)
         server = server['response']['upload_url']
         to_upload = []
         for att in atts:
@@ -57,17 +53,17 @@ class Moderation(Cog):
     async def on_chat_kick_user(self, msg):
         chat_id = msg.peer_id
         uid = msg.action.member_id
-        await self.bot.kick(chat_id, uid)
+        await fcbot.kick(chat_id, uid)
 
     @Cog.listener('on_chat_invite_user')
     @Cog.listener('on_chat_invite_user_by_link')
     async def on_invite(self, msg):
         chat_id = msg.peer_id
         uid = msg.action.member_id or msg.from_id
-        ment = await self.bot.get_mention(uid)
-        text = await self.bot.hello_from_pinned(chat_id)
+        ment = await fcbot.get_mention(uid)
+        text = await fcbot.hello_from_pinned(chat_id)
         res = f'{ment}, {text}'
-        return await msg.send(res, attachment=await self.bot.get_random_art('privetstvie'))
+        return await msg.send(res, attachment=await fcbot.get_random_art('privetstvie'))
 
     @Cog.listener()
     async def on_message_new(self, msg):
@@ -88,32 +84,26 @@ class Moderation(Cog):
         )
         result = await locals()['__ex'](ctx, self)
         if result is None:
-            result = ':)'
+            result = answers['confirmations']['exec']
         return await ctx.send(result)
 
     @command(name='+роль', usage='+роль <роль> <id>', help='Команда для добавления роли пользователю', allowed_roles=True)
     async def add_role(self, ctx, role: role_converter, uid: IDConverter):
-        if role not in valid_roles:
-            return await ctx.send(f'Неверно написана роль. Список доступных ролей: {", ".join(role.capitalize() for role in valid_roles)}')
         if role_scopes[role] and ctx.peer_id not in role_scopes[role]:
-            return await ctx.send('Эту роль нельзя выдавать в этой беседе!')
+            return await ctx.send(answers['warnings']['role_not_available'])
         prof = await FCMember.load(uid)
         res = await prof.add_role(role, ctx.peer_id)
         if not res:
-            return await ctx.send('У пользователя уже есть эта роль!')
-        return await ctx.send('Готово!')
+            return await ctx.send(answers['warnings']['already_has_role'])
+        return await ctx.send(answers['general_confirmation'])
 
     @command(name='-роль', usage='-роль <роль> <id>', help='Команда для удаления роли пользователя', allowed_roles=True)
     async def remove_role(self, ctx, role: role_converter, uid: IDConverter):
-        if role not in valid_roles:
-            return await ctx.send(f'Неверно написана роль. Список доступных ролей: {", ".join(role.capitalize() for role in valid_roles)}')
-        if role_scopes[role] and ctx.peer_id not in role_scopes[role]:
-            return await ctx.send('Эту роль нельзя выдавать в этой беседе!')
         prof = await FCMember.load(uid)
         res = await prof.remove_role(role, ctx.peer_id)
         if not res:
-            return await ctx.send('У пользователя нет этой роли!')
-        return await ctx.send('Готово!')
+            return await ctx.send(answers['warnings']['does_not_have_role'])
+        return await ctx.send(answers['general_confirmation'])
 
     @command(name='+команда', usage='+команда <название> <арт> <текст>', allowed_roles=True,
              help='Команда для добавления команд\nВ тексте {ment} автоматически заменяется на упоминание отправителя, '
@@ -129,95 +119,115 @@ class Moderation(Cog):
         art = art.lower()
         res = await CallbackCommand.add(name, text, art)
         if not res:
-            return await ctx.send('Команда с таким именем уже существует!')
+            return await ctx.send(answers['warnings']['command_name_taken'])
         res.inject()
-        return await ctx.send('Готово!')
+        return await ctx.send(answers['general_confirmation'])
 
     @command(name='+название', usage='+название <команда> <название>', allowed_roles=True,
              help='Команда для добавления альтернативного названия команде, добавленной с помощью "+команда"\n'
                   'Пример: +название кусь укусить\n'
                   'После этого команду "кусь" можно будет так же использовать с помощью "укусить"')
-    async def add_alias(self, ctx, comm: CommandConverter(), *, name):
+    async def add_alias(self, ctx, comm: command_converter, *, name):
         if not comm.callback_instance:
-            return await ctx.send('Этой команде нельзя добавлять названия')
+            return await ctx.send(answers['warnings']['cannot_name_command'])
         callback = comm.callback_instance
         if await callback.add_alias(name.lower()):
-            return await ctx.send('Готово!')
-        return await ctx.send('Это название уже занято!')
+            return await ctx.send(answers['general_confirmation'])
+        return await ctx.send(answers['warnings']['command_name_taken'])
 
     @command(name='-команда', usage='-команда <команда>', allowed_roles=True,
              help='Команда для удаления команд добавленных с помощью "+команда"')
-    async def remove_command(self, ctx, *, comm: CommandConverter()):
+    async def remove_command(self, ctx, *, comm: command_converter):
         if not comm.callback_instance:
-            return await ctx.send('Эту команду нельзя удалить')
+            return await ctx.send(answers['warnings']['cannot_delete_command'])
         callback = comm.callback_instance
         await callback.delete()
-        return await ctx.send('Готово!')
+        return await ctx.send(answers['general_confirmation'])
 
     @command(name='+арт', usage='+арт <команда>', allowed_roles=True,
              help='Команда для добавления арта команды\nДля добавления арта прикрепите его к сообщению')
-    async def add_art(self, ctx, *, comm: CommandConverter()):
+    async def add_art(self, ctx, *, comm: command_converter):
         if not ctx.message.attachments:
-            return await ctx.send('Для добавления арта прикрепите его к сообщению')
+            return await ctx.send(answers['warnings']['attach_arts'])
         res = await self.upload_photos(comm.used_art, ctx.message.attachments[0])
         if not res:
-            return await ctx.send('Для добавления арта прикрепите его к сообщению')
-        return await ctx.send('Готово! Добавленный арт:', attachment=res)
+            return await ctx.send(answers['warnings']['attach_arts'])
+        return await ctx.send(answers['confirmations']['art'], attachment=res)
 
     @command(name='+арты', usage='+арты <команда>', allowed_roles=True,
              help='Команда для добавления нескольких артов к команде\nДля добавления артов прикрепите их к сообщению')
-    async def add_arts(self, ctx, *, comm: CommandConverter()):
+    async def add_arts(self, ctx, *, comm: command_converter):
         if not ctx.message.attachments:
-            return await ctx.send('Для добавления артов прикрепите их к сообщению')
+            return await ctx.send(answers['warnings']['attach_arts'])
         res = await self.upload_photos(comm.used_art, *ctx.message.attachments)
         if not res:
-            return await ctx.send('Для добавления артов прикрепите их к сообщению')
-        return await ctx.send('Готово!\nДобавленные арты:', attachment=res)
+            return await ctx.send(answers['warnings']['attach_arts'])
+        return await ctx.send(answers['confirmations']['arts'], attachment=res)
 
     @command(name='-арт', usage='-арт <ссылка на арт>', allowed_roles=True,
              help='Команда для удаления арта из альбомов бота')
     async def remove_art(self, ctx, url):
         image = trim_image_url(url.lower())
         if not image:
-            return await ctx.send('Некорректная ссылка на арт!')
-        res = await self.bot.delete_arts(image)
+            return await ctx.send(answers['warnings']['wrong_image_url'])
+        res = await fcbot.delete_arts(image)
         if res is None:
-            return await ctx.send('Такого арта не существует!')
-        return await ctx.send('Готово!')
+            return await ctx.send(answers['warnings']['no_such_arts'])
+        return await ctx.send(answers['general_confirmation'])
 
     @command(name='-арты', usage='-арты <ссылки на арты>', allowed_roles=True,
              help='Команда для удаления нескольких артов из альбомов бота')
     async def remove_arts(self, ctx, *urls):
         images = [trim_image_url(url.lower()) for url in urls]
         images = [image for image in images if image is not None]
-        res = await self.bot.delete_arts(*images)
+        res = await fcbot.delete_arts(*images)
         if res is None:
-            return await ctx.send('Таких артов не существует!')
-        return await ctx.send('Готово! Удаленные арты:\n' + '\n'.join([f'https://vk.com/{image}' for image in res]))
+            return await ctx.send(answers['warnings']['no_such_arts'])
+        return await ctx.send(answers['confirmations']['arts_deleted'] + '\n'.join([f'https://vk.com/{image}' for image in res]))
 
     @command(name='арты', usage='арты <команда>', allowed_roles=True,
              help='Команда для просмотра всех артов команды')
-    async def show_arts(self, ctx, *, comm: CommandConverter()):
-        res = await self.bot.get_album(comm.used_art)
+    async def show_arts(self, ctx, *, comm: command_converter):
+        res = await fcbot.get_album(comm.used_art)
         if not res:
-            return await ctx.send('Нет артов для данной команды!')
+            return await ctx.send(answers['warnings']['no_command_arts'])
         return await ctx.send('\n'.join(res))
 
     @command(name='количество артов', aliases=['кол-во артов'], allowed_roles=True,
              usage='количество артов', help='Команда для просмотра количества артов для различных команд')
     async def artcount(self, ctx):
-        albums = await self.bot.get_albums()
+        albums = await fcbot.get_albums()
         res = [(k, albums[k]) for k in sorted(albums, key=lambda x: (albums[x], x))]
-        return await ctx.send('Количество артов различных команд:\n' + '\n'.join([f'{art[0]} - {art[1]}' for art in res]))
+        return await ctx.send(answers['confirmations']['arts_count'] + '\n'.join([f'{art[0]} - {art[1]}' for art in res]))
 
     @command(name='помощь', aliases=['команды'], allowed_roles=True,
              usage='помощь [команда]', help='Если ты читаешь это сообщение, то, думаю, ты понимаешь для чего эта команда')
     async def help(self, ctx, *, comm=''):
         if not comm:
             return await ctx.send('Список команд (это временная помощь, не волнуйтесь):\n' + '\n'.join([comm.name for comm in sorted(fcbot.commands, key=lambda x: x.name)]))
-        res = await CommandConverter().convert(ctx, comm)
-        return await ctx.send(f'Команда "{res.name}":\nИспользование: {ctx.prefix}{res.usage}\n\nПомощь: "{res.help}"')
+        res = command_converter(comm)
+        return await ctx.send(answers['confirmations']['help'].format(res.name, ctx.prefix, res.usage, res.help))
+
+    @command(name='пред', aliases=['варн', 'предупреждение'], allowed_roles=True, usage='пред <id>',
+             help='Команда для выдачи предупреждения пользователю')
+    async def warning(self, ctx, target: IDConverter()):
+        prof = await FCMember.load(target)
+        res = await prof.add_warning(ctx.from_id, ctx.peer_id)
+        if res:
+            await ctx.send(answers['confirmations']['kicked_for_warnings'])
+            await fcbot.kick(ctx.peer_id, target)
+            return await prof.remove_all_warnings(ctx.peer_id)
+        return await ctx.send(answers['confirmations']['general'])
+
+    @command(name='-пред', aliases=['-варн', '-предупреждение', 'убрать пред', 'убрать предупреждение'], allowed_roles=True,
+             usage='-пред <id>', help='Команда для снятия предупреждения пользователю')
+    async def remove_warning(self, ctx, target: IDConverter()):
+        prof = await FCMember.load(target)
+        res = await prof.remove_warning(ctx.peer_id)
+        if not res:
+            return await ctx.send(answers['warnings']['no_warnings'])
+        return await ctx.send(answers['confirmations']['general'])
 
 
-def moderation_setup(bot):
-    bot.add_cog(Moderation(bot))
+def moderation_setup():
+    fcbot.add_cog(Moderation())

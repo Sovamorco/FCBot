@@ -1,7 +1,7 @@
 import math
 import traceback
 
-from credentials import vk_fcbot_token, vk_personal_audio_token
+from credentials import vk_fcbot_token, vk_fcbot_beta_token, vk_personal_audio_token
 from fuzzywuzzy import fuzz
 from vk_botting import CommandNotFound, MissingRequiredArgument, CommandOnCooldown
 
@@ -12,7 +12,7 @@ FCMember._bot = fcbot
 
 @fcbot.listen()
 async def on_ready():
-    moderation_setup(fcbot)
+    moderation_setup()
     await inject_callbacks()
     await fcbot.refresh_albums()
     await fcbot.attach_user_token(vk_personal_audio_token)
@@ -38,7 +38,7 @@ async def roles_check(ctx):
 @fcbot.check
 async def chat_check(ctx):
     if ctx.peer_id not in chatlist and ctx.from_id not in basically_gods:
-        await ctx.send('Команды можно использовать только в беседах [club151434682|Фандомной Кафешки]!')
+        await ctx.send(answers['warnings']['not_in_chatlist'])
         return False
     return True
 
@@ -52,30 +52,31 @@ async def on_command_error(ctx, error):
         for comm in fcbot.commands:
             for alias in [comm.name] + comm.aliases:
                 if not comm.hidden and fuzz.partial_ratio(msg, alias) >= 80:
-                    poss.append(comm.name)
+                    poss.append(alias)
                     break
-        ans = 'Неверно написана команда или ее не существует'
+        ans = answers['warnings']['command_misspelled']
         if poss and len(poss) <= 5:
-            ans += '\nВозможно вы имели в виду: ' + ', '.join(poss)
+            ans += answers['misc']['command_suggestions'].format(', '.join(poss))
         await ctx.send(ans)
+    elif isinstance(error, FConversionError):
+        return await ctx.send(error.msg)
     elif isinstance(error, BadArgument):
-        return await ctx.send(f'Неверный тип аргумента\nПример использования: "!{ctx.command.usage}"')
+        return await ctx.send(answers['warnings']['bad_argument'].format(ctx.prefix, ctx.command.usage))
     elif isinstance(error, MissingRequiredArgument):
-        return await ctx.send(f'Пример использования: "!{ctx.command.usage}"')
+        return await ctx.send(answers['warnings']['missing_argument'].format(ctx.prefix, ctx.command.usage))
     elif isinstance(error, ProfileNotCreatedError):
-        return await ctx.send(f'{error.original}\n'
-                              'Для создания профиля пользователь должен написать хотя бы одно сообщение')
+        return await ctx.send(error.original)
     elif isinstance(error, CommandOnCooldown):
         wt = math.ceil(error.retry_after)
-        return await ctx.send(f'Команда перезаряжается, подождите {wt} {form(wt, ["секунду", "секунды", "секунд"])}')
+        return await ctx.send(answers['warnings']['command_on_cooldown'].format(wt, form(wt, ["секунду", "секунды", "секунд"])))
     elif isinstance(error, CommandInvokeError):
         traceback.print_exception(type(error), error, error.__traceback__)
         await log_error(ctx.message.original_data, ''.join(traceback.format_exception(type(error), error, error.__traceback__)))
         if len(str(error.original)) < 200 and 'access_token' not in str(error.original):
-            await ctx.send(f'Ошибка:\n{error.original}\n[id{nobody}|_]')
+            await ctx.send(answers['warnings']['other_error'].format(error.original))
         else:
-            await ctx.send(f'Ошибка (подробнее в логах)\n[id{nobody}|_]')
+            await ctx.send(answers['warnings']['other_error'].format('(подробнее в логах)'))
         for prof in profiles_cache:
             await profiles_cache[prof].dump()
 
-fcbot.run(vk_fcbot_token)
+fcbot.run(vk_fcbot_beta_token if dev else vk_fcbot_token)

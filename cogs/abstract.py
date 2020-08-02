@@ -3,7 +3,7 @@ from copy import deepcopy
 from time import time
 
 import aiomysql
-from vk_botting import CommandInvokeError
+from vk_botting import CommandInvokeError, ConversionError
 
 from cogs.constants import *
 
@@ -181,3 +181,8 @@ class AbstractCacheManager:
 
 class ProfileNotCreatedError(CommandInvokeError):
     pass
+
+
+class FConversionError(ConversionError):
+    def __init__(self, msg):
+        self.msg = msg
