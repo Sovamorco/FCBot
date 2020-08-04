@@ -12,6 +12,7 @@ FCMember._bot = fcbot
 
 
 async def other_setups():
+    await fcbot.refresh_albums()
     if not dev:
         for comm in fcbot.walk_commands():
             if comm.used_art and comm.used_art not in fcbot.album_converter:
@@ -26,7 +27,6 @@ async def on_ready():
     profiles_setup()
     await other_setups()
     await inject_callbacks()
-    await fcbot.refresh_albums()
     await fcbot.send_update_message()
     print(f'Logged in as {fcbot.group.name}')
 
