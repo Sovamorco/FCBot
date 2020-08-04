@@ -18,6 +18,7 @@ class FCMember(AbstractSQLObject):
     _key_column = 'id'
     id: int
     nick: str
+    cookies: int
 
     async def get_mention(self):
         if self.nick:
@@ -401,7 +402,7 @@ class FCBot(Bot):
                     ans += answers['misc']['bot_updated']['more_than_five']
                 else:
                     ans += answers['misc']['bot_updated']['less_than_five']
-            for commit in new[:5]:
+            for commit in new[:5][::-1]:
                 ans += answers['misc']['bot_updated']['commit'].format(commit.message.strip())
             lines, insertions, deletions = zip(*[(comm.stats.total['lines'], comm.stats.total['insertions'], comm.stats.total['deletions']) for comm in new])
             lines, insertions, deletions = sum(lines), sum(insertions), sum(deletions)

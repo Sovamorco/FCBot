@@ -27,9 +27,26 @@ class Profiles(Cog):
         lines = [answers['profiles']['profile']['header'].format(await prof.get_mention()),
                  answers['profiles']['profile']['warnings'].format(await prof.get_warnings_count(ctx.peer_id))]
         roles = await prof.get_roles()
-        lines += [f'Роль - {role.name.capitalize()}' for role in roles] or ['Роль - Участник']
-        lines += ['', answers['profiles']['profile']['disclaimer']]
+        lines += [answers['profiles']['profile']['role'].format(role.name.capitalize()) for role in roles] or \
+                 [answers['profiles']['profile']['role'].format('Участник')]
+        lines += [answers['profiles']['profile']['cookies'].format(prof.cookies), '', answers['profiles']['profile']['disclaimer']]
         return await ctx.send('\n'.join(lines))
+
+    @command(name='подарить печеньки', usage='подарить печеньки <id> <кол-во>',
+             aliases=['перевести', 'перевести печеньки', 'подарить', 'поделиться', 'поделиться печеньками'],
+             help='Эта команда позволяет делиться печеньками с другими пользователями')
+    async def gift_cookies(self, ctx, uid: IDConverter(), amt: int):
+        if amt <= 0:
+            return await ctx.send(answers['warnings']['bad_posint'])
+        prof = await FCMember.load(ctx.from_id)
+        if amt > prof.cookies:
+            return await ctx.send(answers['warnings']['not_enough_cookies'])
+        tprof = await FCMember.load(uid)
+        prof.cookies -= amt
+        tprof.cookies += amt
+        await ctx.send(answers['confirmations']['general'])
+        await prof.dump()
+        return await tprof.dump()
 
     @command(name='брак запрос', aliases=['запрос в брак', 'запрос на брак', 'запрос брака', 'запрос'], usage='брак запрос <id>',
              help='Эта команда позволяет отправить пользователю запрос на брак')

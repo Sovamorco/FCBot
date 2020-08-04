@@ -98,7 +98,7 @@ class AbstractSQLObject(metaclass=MetaASO):
 
     @property
     def incremental(self):
-        return []
+        return ['cookies']
 
     def get_changed(self):
         org = self.original
@@ -110,6 +110,7 @@ class AbstractSQLObject(metaclass=MetaASO):
                     res.append((key, cur[key]-org[key]))
                 else:
                     res.append((key, cur[key]))
+        self.original = cur
         return tuple(zip(*res)) or ()
 
     async def dump(self):
