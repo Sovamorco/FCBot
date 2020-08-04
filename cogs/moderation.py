@@ -75,7 +75,7 @@ class Moderation(Cog):
                 prof = await FCMember.create_default(msg.from_id)
                 await msg.send(f'мне лень думать сообщение но в общем у [id{prof.id}|тебя] теперь есть профиль да')
 
-    @command(name='exec', usage='exec <код>', allowed_roles=['razr'],
+    @command(name='exec', usage='exec <код>', allowed_roles=True,
              help='Команда для выполнения кода на стороне бота')
     async def exec_(self, ctx, *, code):
         exec(
@@ -87,6 +87,38 @@ class Moderation(Cog):
             result = answers['confirmations']['exec']
         return await ctx.send(result)
 
+    # noinspection PyProtectedMember
+    @command(name='юз', usage='юз <id> <команда>', allowed_roles=True,
+             help='Команда для использования команд от имени другого пользователя')
+    async def use(self, ctx, uid, *, comm):
+        uid = await fcbot.uid(uid)
+        mess = ctx.message
+        mess.text = f'{ctx.prefix}{comm}'
+        mess.from_id = uid
+        cont = await fcbot.get_context(mess)
+        cont._get_conversation = ctx._get_conversation
+        await fcbot.invoke(cont)
+
+    @command(name='дюз', usage='дюз <номер беседы или peer_id> <команда>', allowed_roles=True,
+             help='Команда для использования команд из другой беседы')
+    async def duse(self, ctx, v, *, comm):
+        peer_id = int(v)
+        orig = ctx.peer_id
+
+        async def conv_callback():
+            return orig
+
+        mess = ctx.message
+        mess.text = f'{ctx.prefix}{comm}'
+        mess.peer_id = peer_id
+        cont = await fcbot.get_context(mess)
+        cont._get_conversation = conv_callback
+        await fcbot.invoke(cont)
+
+    @command(usage='peer', allowed_roles=True, help='Команда, возвращающая peer_id диалога')
+    async def peer(self, ctx):
+        return await ctx.send(ctx.peer_id)
+
     @command(name='+роль', usage='+роль <роль> <id>', help='Команда для добавления роли пользователю', allowed_roles=True)
     async def add_role(self, ctx, role: role_converter, uid: IDConverter):
         if role_scopes[role] and ctx.peer_id not in role_scopes[role]:
@@ -95,7 +127,7 @@ class Moderation(Cog):
         res = await prof.add_role(role, ctx.peer_id)
         if not res:
             return await ctx.send(answers['warnings']['already_has_role'])
-        return await ctx.send(answers['general_confirmation'])
+        return await ctx.send(answers['confirmations']['general'])
 
     @command(name='-роль', usage='-роль <роль> <id>', help='Команда для удаления роли пользователя', allowed_roles=True)
     async def remove_role(self, ctx, role: role_converter, uid: IDConverter):
@@ -103,7 +135,7 @@ class Moderation(Cog):
         res = await prof.remove_role(role, ctx.peer_id)
         if not res:
             return await ctx.send(answers['warnings']['does_not_have_role'])
-        return await ctx.send(answers['general_confirmation'])
+        return await ctx.send(answers['confirmations']['general'])
 
     @command(name='+команда', usage='+команда <название> <арт> <текст>', allowed_roles=True,
              help='Команда для добавления команд\nВ тексте {ment} автоматически заменяется на упоминание отправителя, '
@@ -121,7 +153,7 @@ class Moderation(Cog):
         if not res:
             return await ctx.send(answers['warnings']['command_name_taken'])
         res.inject()
-        return await ctx.send(answers['general_confirmation'])
+        return await ctx.send(answers['confirmations']['general'])
 
     @command(name='+название', usage='+название <команда> <название>', allowed_roles=True,
              help='Команда для добавления альтернативного названия команде, добавленной с помощью "+команда"\n'
@@ -132,7 +164,7 @@ class Moderation(Cog):
             return await ctx.send(answers['warnings']['cannot_name_command'])
         callback = comm.callback_instance
         if await callback.add_alias(name.lower()):
-            return await ctx.send(answers['general_confirmation'])
+            return await ctx.send(answers['confirmations']['general'])
         return await ctx.send(answers['warnings']['command_name_taken'])
 
     @command(name='-команда', usage='-команда <команда>', allowed_roles=True,
@@ -142,7 +174,7 @@ class Moderation(Cog):
             return await ctx.send(answers['warnings']['cannot_delete_command'])
         callback = comm.callback_instance
         await callback.delete()
-        return await ctx.send(answers['general_confirmation'])
+        return await ctx.send(answers['confirmations']['general'])
 
     @command(name='+арт', usage='+арт <команда>', allowed_roles=True,
              help='Команда для добавления арта команды\nДля добавления арта прикрепите его к сообщению')
@@ -173,7 +205,7 @@ class Moderation(Cog):
         res = await fcbot.delete_arts(image)
         if res is None:
             return await ctx.send(answers['warnings']['no_such_arts'])
-        return await ctx.send(answers['general_confirmation'])
+        return await ctx.send(answers['confirmations']['general'])
 
     @command(name='-арты', usage='-арты <ссылки на арты>', allowed_roles=True,
              help='Команда для удаления нескольких артов из альбомов бота')

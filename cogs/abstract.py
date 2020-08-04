@@ -121,7 +121,7 @@ class AbstractSQLObject(metaclass=MetaASO):
         filler = ', '.join(['%s'] * len(changed))
         updates = ', '.join([f'`{change}`=`{change}`+%s' if change in self.incremental else f'`{change}`=%s' for change in changed])
         await abstract_sql(f'INSERT INTO `{type(self).table}` ({type(self).key_column}, {changes}) VALUES (%s, {filler}) ON DUPLICATE KEY UPDATE {updates}',
-                           *[getattr(self, type(self).key_column)] + values * 2)
+                           *[getattr(self, type(self).key_column)] + list(values) * 2)
         return True
 
     @classmethod

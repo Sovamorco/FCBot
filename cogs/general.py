@@ -108,11 +108,11 @@ class FCMember(AbstractSQLObject):
     async def remove_all_warnings(self, chat_id):
         await abstract_sql('DELETE FROM warnings WHERE user=%s AND chat=%s', self.id, chat_id)
 
-    async def get_family(self):
-        res = await abstract_sql('SELECT * FROM families WHERE state=1 AND (first=%s OR second=%s)', self.id, self.id)
+    async def get_family(self) -> 'Family':
+        res = await abstract_sql('SELECT * FROM families WHERE state=1 AND (first=%s OR second=%s)', self.id, self.id, fetch=True)
         if res:
             return Family(self.id, res)
-        return None
+        return Family(self.id)
 
     async def get_incoming_request(self):
         return await abstract_fetch(False, 'families', ['second', 'state'], [self.id, 0])
@@ -120,21 +120,102 @@ class FCMember(AbstractSQLObject):
     async def get_outgoing_request(self):
         return await abstract_fetch(False, 'families', ['first', 'state'], [self.id, 0])
 
+    async def cancel_incoming_request(self):
+        await abstract_sql('DELETE FROM families WHERE second=%s AND state=0', self.id)
+
+    async def cancel_outgoing_request(self):
+        await abstract_sql('DELETE FROM families WHERE first=%s AND state=0', self.id)
+
+    async def send_request(self, uid):
+        await abstract_sql('INSERT INTO families (first, second) VALUES (%s, %s)', self.id, uid)
+
+    async def accept_request(self):
+        inc = await self.get_incoming_request()
+        await abstract_sql('UPDATE families SET state=1 WHERE id=%s', inc['id'])
+        await self.cancel_outgoing_request()
+
+    async def accept_child_request(self):
+        await abstract_sql('UPDATE children SET state=1 WHERE child=%s', self.id)
+
+    async def leave_parents(self):
+        await abstract_sql('DELETE FROM children WHERE child=%s', self.id)
+
 
 class Family:
-    def __init__(self, mc, data):
-        self.id = data['id']
+    def __init__(self, mc, data=None):
+        self.id = data['id'] if data else None
         self.self = mc
-        self.pair = data['first'] if data['first'] != mc else data['second']
-        self.state = data['state']
+        if data:
+            self.partner = data['first'] if data['first'] != mc else data['second']
+        else:
+            self.partner = None
 
-    async def get_children(self):
-        res = await abstract_fetch(True, 'children', ['family', 'state'], [self.id, 1])
+    async def get_children(self, pending=False):
+        res = await abstract_fetch(True, 'children', ['family', 'state'], [self.id, 1-pending])
         return [await FCMember.load(child['child']) for child in res]
 
-    async def get_pending_children(self):
-        res = await abstract_fetch(True, 'children', ['family', 'state'], [self.id, 0])
-        return [await FCMember.load(child['child']) for child in res]
+    async def get_parents(self, pending=False):
+        res = await abstract_fetch(False, 'children', ['child', 'state'], [self.self, 1 - pending])
+        if res:
+            family = await abstract_fetch(False, 'families', ['id'], [res['family']])
+            return await FCMember.load(family['first']), await FCMember.load(family['second'])
+        return None
+
+    async def get_siblings(self):
+        parents = await self.get_parents()
+        if not parents:
+            return []
+        pfam = await parents[0].get_family()
+        siblings = await pfam.get_children()
+        return [sibling for sibling in siblings if sibling.id != self.self]
+
+    async def get_partner(self):
+        if not self.partner:
+            return None
+        return await FCMember.load(self.partner)
+
+    async def divorce(self):
+        await abstract_sql('DELETE FROM families WHERE id=%s', self.id)
+        await abstract_sql('DELETE FROM children WHERE family=%s', self.id)
+
+    async def add_child(self, uid):
+        await abstract_sql('INSERT INTO children (child, family) VALUES (%s, %s)', uid, self.id)
+
+    async def get_bottom_danger_zone(self, dangerous=None):
+        if dangerous is None:
+            dangerous = set()
+        children = await self.get_children() + await self.get_children(True)
+        dz = {child.id for child in children}
+        for child in children:
+            if child.id in dangerous:
+                continue
+            cf = await child.get_family()
+            tdz = await cf.get_bottom_danger_zone(dangerous | dz)
+            dangerous |= tdz
+        return dangerous | dz
+
+    async def get_top_danger_zone(self, dangerous=None):
+        if dangerous is None:
+            dangerous = set()
+        parents = await self.get_parents() or await self.get_parents(True)
+        if not parents:
+            return dangerous
+        dz = {parent.id for parent in parents}
+        for parent in parents:
+            if parent.id in dangerous:
+                continue
+            pf = await parent.get_family()
+            tdz = await pf.get_top_danger_zone(dangerous | dz)
+            dangerous |= tdz
+        return dangerous | dz
+
+    async def get_danger_zone(self):
+        siblings = await self.get_siblings()
+        sdz = {sibling.id for sibling in siblings}
+        bdz = await self.get_bottom_danger_zone()
+        tdz = await self.get_top_danger_zone()
+        odz = {self.self, self.partner} if self.partner else {self.self}
+        return bdz | tdz | sdz | odz
 
 
 class FCBot(Bot):
@@ -374,16 +455,6 @@ class Role:
         self.scope = data['scope']
 
 
-def form(num, arr):
-    if 15 > abs(num) % 100 > 10:
-        return arr[2]
-    if abs(num) % 10 == 1:
-        return arr[0]
-    if abs(num) % 10 > 4 or abs(num) % 10 == 0:
-        return arr[2]
-    return arr[1]
-
-
 def trim_image_url(screen_name):
     res = re.search(art_regex, screen_name) or re.search(doc_regex, screen_name)
     if not res:
@@ -392,8 +463,15 @@ def trim_image_url(screen_name):
 
 
 class IDConverter(Converter):
-    async def convert(self, _, argument):
-        return await fcbot.uid(argument)
+
+    def __init__(self, optional=False):
+        self.optional = optional
+
+    async def convert(self, ctx, argument):
+        if argument:
+            return await fcbot.uid(argument)
+        elif self.optional:
+            return ctx.from_id
 
 
 def role_converter(arg: str):
@@ -498,5 +576,6 @@ async def inject_callbacks():
         callback.inject()
 
 
-fcbot = FCBot(when_mentioned_or_pm_or('!'), case_insensitive=True, force=True)
+fcbot = FCBot(when_mentioned_or_pm_or('!'), case_insensitive=True, lang='ru')
 profiles_cache = AbstractCacheManager(fcbot.loop, 900)
+users_cache = AbstractCacheManager(fcbot.loop, 604800)

@@ -6,6 +6,7 @@ from fuzzywuzzy import fuzz
 from vk_botting import CommandNotFound, MissingRequiredArgument, CommandOnCooldown
 
 from cogs.moderation import *
+from cogs.profiles import *
 
 FCMember._bot = fcbot
 
@@ -13,6 +14,7 @@ FCMember._bot = fcbot
 @fcbot.listen()
 async def on_ready():
     moderation_setup()
+    profiles_setup()
     await inject_callbacks()
     await fcbot.refresh_albums()
     await fcbot.attach_user_token(vk_personal_audio_token)
@@ -22,12 +24,14 @@ async def on_ready():
 
 @fcbot.check
 async def roles_check(ctx):
+    if ctx.from_id in basically_gods:
+        return True
     if not ctx.command:
         return True
     if not ctx.command.allowed_roles:
         return True
     if not isinstance(ctx.command.allowed_roles, list):
-        return ctx.from_id in basically_gods
+        return False
     try:
         prof = await FCMember.load(ctx.from_id)
     except ProfileNotCreatedError:
