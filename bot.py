@@ -11,10 +11,19 @@ from cogs.profiles import *
 FCMember._bot = fcbot
 
 
+async def other_setups():
+    if not dev:
+        for comm in fcbot.walk_commands():
+            if comm.used_art and comm.used_art not in fcbot.album_converter:
+                oid, aid = await fcbot.create_album(comm.name.capitalize(), f'Арты для команды "{comm.name.capitalize()}"')
+                await fcbot.add_album(comm.used_art, oid, aid)
+
+
 @fcbot.listen()
 async def on_ready():
     moderation_setup()
     profiles_setup()
+    await other_setups()
     await inject_callbacks()
     await fcbot.refresh_albums()
     await fcbot.attach_user_token(vk_personal_audio_token)
