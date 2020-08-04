@@ -577,6 +577,13 @@ async def inject_callbacks():
         callback.inject()
 
 
+# noinspection PyGlobalUndefined
+def update_cache():
+    global profiles_cache
+    global users_cache
+    profiles_cache = AbstractCacheManager(fcbot.loop, 900)
+    users_cache = AbstractCacheManager(fcbot.loop, 604800)
+
+
 fcbot = FCBot(when_mentioned_or_pm_or('!'), case_insensitive=True, lang='ru')
-profiles_cache = AbstractCacheManager(fcbot.loop, 900)
-users_cache = AbstractCacheManager(fcbot.loop, 604800)
+update_cache()

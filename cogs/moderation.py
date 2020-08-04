@@ -119,6 +119,25 @@ class Moderation(Cog):
     async def peer(self, ctx):
         return await ctx.send(ctx.peer_id)
 
+    @command(name='обновить', allowed_roles=True, help='Команда для обновления кэша бота')
+    async def update_cache(self, ctx):
+        update_cache()
+        return await ctx.send(answers['confirmations']['general'])
+
+    @command(name='set', allowed_roles=True, usage='set <id> <аттрибут> <значение>',
+             help='Команда для изменения аттрибутов профилей пользователей')
+    async def set_attr(self, ctx, uid: IDConverter(), attr, *, value: str):
+        if value.isdigit():
+            value = int(value)
+        elif value.endswith('_str') and value.replace('_str', '').isdigit():
+            value = value.replace('_str', '')
+        prof = await FCMember.load(uid)
+        if not hasattr(prof, attr):
+            return await ctx.send(answers['warnings']['noattr'])
+        setattr(prof, attr, value)
+        await prof.dump()
+        return await ctx.send(answers['confirmations']['general'])
+
     @command(name='+роль', usage='+роль <роль> <id>', help='Команда для добавления роли пользователю', allowed_roles=True)
     async def add_role(self, ctx, role: role_converter, uid: IDConverter):
         if role_scopes[role] and ctx.peer_id not in role_scopes[role]:
