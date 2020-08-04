@@ -21,12 +21,12 @@ async def other_setups():
 
 @fcbot.listen()
 async def on_ready():
+    await fcbot.attach_user_token(vk_personal_audio_token)
     moderation_setup()
     profiles_setup()
     await other_setups()
     await inject_callbacks()
     await fcbot.refresh_albums()
-    await fcbot.attach_user_token(vk_personal_audio_token)
     await fcbot.send_update_message()
     print(f'Logged in as {fcbot.group.name}')
 
