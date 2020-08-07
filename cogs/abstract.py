@@ -1,5 +1,6 @@
 from asyncio import sleep
 from copy import deepcopy
+from random import random
 from time import time
 
 import aiomysql
@@ -187,3 +188,46 @@ class ProfileNotCreatedError(CommandInvokeError):
 class FConversionError(ConversionError):
     def __init__(self, msg):
         self.msg = msg
+
+
+class PseudoRandom:
+    def __init__(self, dec_level=3):
+        self.sequence = []
+        self.percentage = {}
+        self.dec_level = dec_level
+
+    @staticmethod
+    def clamp_list(inp):
+        mult = 1/sum(inp)
+        return [el * mult for el in inp]
+
+    def clamp_dict(self, inp):
+        values = self.clamp_list(inp.values())
+        return dict(zip(inp.keys(), values))
+
+    def choice(self, sequence):
+        sequence = list(sequence)
+        newel = []
+        for el in set(self.sequence + sequence):
+            if el not in self.sequence:
+                self.sequence.append(el)
+                newel.append(el)
+            elif el in self.sequence and el not in sequence:
+                self.sequence.remove(el)
+                self.percentage.pop(el, None)
+        default = 1 / len(self.sequence)
+        for el in newel:
+            self.percentage[el] = default
+        self.percentage = self.clamp_dict(self.percentage)
+        tp = self.percentage.copy()
+        for outcome in self.sequence:
+            chance = tp.pop(outcome)
+            if random() < chance:
+                res = outcome
+                break
+            tp = self.clamp_dict(tp)
+        else:
+            res = self.sequence[-1]
+        self.percentage[res] /= self.dec_level
+        self.percentage = self.clamp_dict(self.percentage)
+        return res

@@ -29,7 +29,10 @@ class Profiles(Cog):
         roles = await prof.get_roles()
         lines += [answers['profiles']['profile']['role'].format(role.name.capitalize()) for role in roles] or \
                  [answers['profiles']['profile']['role'].format('Участник')]
-        lines += [answers['profiles']['profile']['cookies'].format(prof.cookies), '', answers['profiles']['profile']['disclaimer']]
+        invited = await get_invite(uid)
+        lines += [answers['profiles']['profile']['cookies'].format(prof.cookies),
+                  answers['profiles']['profile']['invited'].format(invited.strftime('%d.%m.%Y')),
+                  '', answers['profiles']['profile']['disclaimer']]
         return await ctx.send('\n'.join(lines))
 
     @command(name='подарить печеньки', usage='подарить печеньки <id> <кол-во>',
@@ -300,6 +303,16 @@ class Profiles(Cog):
 
         res = await fcbot.upload_photo(ctx.peer_id, raw=m.create_png(encoding='utf-8'), format='png')
         return await ctx.send(attachment=res)
+
+    @command(name='статус -', aliases=['оценить -', 'дизлайк', 'понизить', 'минус'], usage='статус - <id> [комментарий]',
+             help='Команда для понижения статуса пользователя')
+    async def decrease_standing(self, ctx, target: IDConverter(), *, comment=''):
+        pass
+
+    @command(name='статус +', aliases=['оценить +', 'лайк', 'повысить', 'плюс'], usage='статус + <id> [комментарий]',
+             help='Команда для повышения статуса пользователя')
+    async def increase_standing(self, ctx, target: IDConverter(), *, comment=''):
+        pass
 
 
 def profiles_setup():

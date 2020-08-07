@@ -60,6 +60,7 @@ class Moderation(Cog):
     async def on_invite(self, msg):
         chat_id = msg.peer_id
         uid = msg.action.member_id or msg.from_id
+        await add_invite(uid)
         ment = await fcbot.get_mention(uid)
         text = await fcbot.hello_from_pinned(chat_id)
         res = f'{ment}, {text}'
@@ -70,6 +71,7 @@ class Moderation(Cog):
         await log_message(datetime.now(), msg.peer_id, msg.from_id, msg.original_data)
         if msg.peer_id in chatlist:
             try:
+                await add_invite(msg.from_id)
                 await FCMember.load(msg.from_id)
             except ProfileNotCreatedError:
                 prof = await FCMember.create_default(msg.from_id)

@@ -5,6 +5,7 @@ from credentials import vk_fcbot_token, vk_fcbot_beta_token, vk_personal_audio_t
 from fuzzywuzzy import fuzz
 from vk_botting import CommandNotFound, MissingRequiredArgument, CommandOnCooldown
 
+from cogs.misc import *
 from cogs.moderation import *
 from cogs.profiles import *
 
@@ -18,6 +19,9 @@ async def other_setups():
             if comm.used_art and comm.used_art not in fcbot.album_converter:
                 oid, aid = await fcbot.create_album(comm.name.capitalize(), f'Арты для команды "{comm.name.capitalize()}"')
                 await fcbot.add_album(comm.used_art, oid, aid)
+    for comm in fcbot.walk_commands():
+        if not comm.usage:
+            comm.usage = comm.name
 
 
 @fcbot.listen()
@@ -25,6 +29,7 @@ async def on_ready():
     await fcbot.attach_user_token(vk_personal_audio_token)
     moderation_setup()
     profiles_setup()
+    misc_setup()
     await other_setups()
     await inject_callbacks()
     await fcbot.send_update_message()
@@ -56,6 +61,13 @@ async def chat_check(ctx):
     return True
 
 
+@fcbot.after_invoke
+async def after_invoke(ctx):
+    if ctx.command.cookies_income:
+        prof = await FCMember.load(ctx.from_id)
+        await prof.add_income_if_not_limit(ctx.command)
+
+
 @fcbot.listen()
 async def on_command_error(ctx, error):
     if isinstance(error, CommandNotFound):
@@ -81,7 +93,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(error.original)
     elif isinstance(error, CommandOnCooldown):
         wt = math.ceil(error.retry_after)
-        return await ctx.send(answers['warnings']['command_on_cooldown'].format(wt, form(wt, ["секунду", "секунды", "секунд"])))
+        return await ctx.send(answers['warnings']['command_on_cooldown'].format(wt, sform(wt, 'секунду')))
     elif isinstance(error, CommandInvokeError):
         traceback.print_exception(type(error), error, error.__traceback__)
         await log_error(ctx.message.original_data, ''.join(traceback.format_exception(type(error), error, error.__traceback__)))

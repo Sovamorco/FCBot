@@ -1,11 +1,9 @@
 import os
-from datetime import datetime
 from json import dumps
 from random import randint
 from typing import List
 
 import git
-import regex as re
 import vk_botting
 from vk_botting import Bot, BadArgument, Command, when_mentioned_or_pm_or
 from vk_botting.conversions import Converter
@@ -140,6 +138,26 @@ class FCMember(AbstractSQLObject):
 
     async def leave_parents(self):
         await abstract_sql('DELETE FROM children WHERE child=%s', self.id)
+
+    async def add_limit(self, comm):
+        await abstract_sql('INSERT INTO limits (user_id, command) VALUES (%s, %s)', self.id, comm)
+
+    async def get_limit(self, comm):
+        res = await abstract_fetch(False, 'limits', ['user_id', 'command'], [self.id, comm])
+        if not res:
+            await self.add_limit(comm)
+            return 0
+        return res['used']
+
+    async def increase_used(self, comm):
+        await abstract_sql('UPDATE limits SET used=used+1 WHERE user_id=%s AND command=%s', self.id, comm)
+
+    async def add_income_if_not_limit(self, comm):
+        lim = await self.get_limit(comm.name)
+        if lim < income_limit:
+            self.cookies += comm.cookies_income
+            await self.dump()
+            await self.increase_used(comm.name)
 
 
 class Family:
@@ -350,6 +368,10 @@ class FCBot(Bot):
                 members[item['member_id']] = self.get_member_by_id(res['response']['profiles'], item['member_id'])
         return members
 
+    async def get_random_member(self, chat_id):
+        mems = await self.get_members(chat_id)
+        return get_rng(chat_id).choice(mems)
+
     async def change_status(self, text):
         await self.user_vk_request('status.set', group_id=self.group.id, text=text)
 
@@ -419,6 +441,7 @@ class FCommand(Command):
         self.hidden = kwargs.pop('hidden', False)
         self.disable_global_cooldown = kwargs.pop('disable_global_cooldown', False)
         self.callback_instance = kwargs.pop('callback', None)
+        self.cookies_income = kwargs.pop('income', None)
         super().__init__(*args, **kwargs)
 
 
@@ -577,13 +600,59 @@ async def inject_callbacks():
         callback.inject()
 
 
-# noinspection PyGlobalUndefined
+async def add_invite(uid):
+    await abstract_sql('INSERT INTO invites (user_id) VALUES (%s) ON DUPLICATE KEY UPDATE user_id=%s', uid, uid)
+
+
+async def get_invite(uid):
+    res = await abstract_fetch(False, 'invites', ['user_id'], [uid])
+    if not res:
+        return None
+    return res['invited']
+
+
+async def cookie_solver(uid, amt):
+    prof = await FCMember.load(uid)
+    prof.cookies += amt
+    await prof.dump()
+    gen = bool(await fcbot.get_gender_end(uid))
+    return answers['confirmations']['fortune_wheel']['cookies'].format(await prof.get_mention(), answers['misc']['pronouns'][gen],
+                                                                       amt, sform(amt, 'печеньку'))
+
+
+async def status_solver(_, __):
+    return 'Тут должно быть сообщение о получении статуса, но, увы, я пока не сделал статус, так что и получить его нельзя'
+
+
+async def nothing_solver(uid, _):
+    ment = await fcbot.get_mention(uid)
+    gen = bool(await fcbot.get_gender_end(uid))
+    return answers['confirmations']['fortune_wheel']['no_reward'].format(ment, answers['misc']['pronouns'][gen])
+
+
+def get_rng(key) -> PseudoRandom:
+    if key not in rng_cache:
+        rng_cache[key] = PseudoRandom()
+    return rng_cache[key]
+
+
 def update_cache():
     global profiles_cache
     global users_cache
+    global rng_cache
     profiles_cache = AbstractCacheManager(fcbot.loop, 900)
     users_cache = AbstractCacheManager(fcbot.loop, 604800)
+    rng_cache = AbstractCacheManager(fcbot.loop)
 
+
+fortune_solvers = {
+    'cookies': cookie_solver,
+    'status': status_solver,
+    'nothing': nothing_solver
+}
 
 fcbot = FCBot(when_mentioned_or_pm_or('!'), case_insensitive=True, lang='ru')
+profiles_cache = AbstractCacheManager(fcbot.loop, 900)
+users_cache = AbstractCacheManager(fcbot.loop, 604800)
+rng_cache = AbstractCacheManager(fcbot.loop)
 update_cache()
