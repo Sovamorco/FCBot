@@ -53,8 +53,8 @@ class Profiles(Cog):
         await prof.dump()
         return await tprof.dump()
 
-    @command(name='брак запрос', aliases=['запрос в брак', 'запрос на брак', 'запрос брака', 'запрос'], usage='брак запрос <id>',
-             help='Эта команда позволяет отправить пользователю запрос на брак')
+    @command(name='брак запрос', aliases=['запрос в брак', 'запрос на брак', 'запрос брака', 'запрос', 'предложение', 'сделать предложение'],
+             usage='брак запрос <id>', help='Эта команда позволяет отправить пользователю запрос на брак')
     async def proposal(self, ctx, target: IDConverter()):
         prof = await FCMember.load(ctx.from_id)
         tprof = await FCMember.load(target)

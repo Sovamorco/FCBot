@@ -1,4 +1,4 @@
-from vk_botting import Cog
+from vk_botting import Cog, Keyboard, KeyboardColor
 from random import choice
 
 from cogs.general import *
@@ -83,6 +83,72 @@ class Misc(Cog):
         ment = await fcbot.get_mention(ctx.from_id)
         gend = await fcbot.get_gender_end(ctx.from_id)
         return await ctx.send(answers['confirmations']['pat'].format(ment, gend, target))
+
+    @command(name='помощь', aliases=['команды'],
+             usage='помощь [команда]', help='Если ты читаешь это сообщение, то, думаю, ты понимаешь для чего эта команда')
+    async def help(self, ctx, *, comm=''):
+        if not comm:
+            keyboard = Keyboard(inline=True)
+            cats = ['Основные команды', 'Команды профилей', 'Команды семьи', 'Команды администрации']
+            for cat in cats:
+                keyboard.add_button(cat, KeyboardColor.SECONDARY)
+                keyboard.add_line()
+            keyboard.lines.pop(-1)
+            return await ctx.send('Категории команд:\n' + '\n'.join(cats), keyboard=keyboard)
+        res = command_converter(comm)
+        if res.help:
+            return await ctx.send(answers['confirmations']['help'].format(res.name, ctx.prefix, res.usage, res.help))
+        return await ctx.send(answers['confirmations']['short_help'].format(res.name, ctx.prefix, res.usage))
+
+    @command(name='основные команды', aliases=['основные', 'помощь основные', 'команды основные'])
+    async def main_help(self, ctx):
+        lines = ['Основные команды:', 'Колесо удачи', 'Кто', 'Выбери', 'Шанс', 'Обнять', 'Погладить', 'Успокоить']
+        for comm in fcbot.commands:
+            if comm.callback_instance:
+                lines.append(comm.name.capitalize())
+        return await ctx.send('\n'.join(lines))
+
+    @command(name='команды профилей', aliases=['помощь профилей', 'помощь по профилю', 'помощь по профилям', 'помощь профиля',
+                                               'команды профиля', 'команды для профиля'])
+    async def profile_help(self, ctx):
+        return await ctx.send('Команды профилей:\nПрофиль\nНик\nПодарить печеньки')
+
+    @command(name='команды семьи', aliases=['помощь семьи', 'помощь по семье', 'помощь семей', 'команды семей'])
+    async def family_help(self, ctx):
+        prof = await FCMember.load(ctx.from_id)
+        fam = await prof.get_family()
+        lines = ['Команды семей:', 'Семья']
+        if fam.partner:
+            lines.append('Развод')
+            lines.append('Завести ребенка')
+        else:
+            if await prof.get_outgoing_request():
+                lines.append('Отменить запрос')
+            else:
+                lines.append('Предложение')
+            if await prof.get_incoming_request():
+                lines.append('Отклонить запрос')
+                lines.append('Принять запрос')
+        if await fam.get_children():
+            lines.append('Сдать в детдом')
+        if await fam.get_parents():
+            lines.append('Сбежать от родителей')
+        elif await fam.get_parents(True):
+            lines.append('Стать ребенком')
+            lines.append('Не хочу быть ребенком')
+        return await ctx.send('\n'.join(lines))
+
+    @command(name='команды администрации', aliases=['помощь администрации', 'помощь админа', 'помощь админов',
+                                                    'помощь для админов', 'команды админа', 'команды админов'])
+    async def admin_help(self, ctx):
+        lines = ['Команды администрации:']
+        mod_commands = fcbot.get_cog('Moderation').get_commands()
+        prof = await FCMember.load(ctx.from_id)
+        for comm in mod_commands:
+            if comm.allowed_roles:
+                if prof.id in basically_gods or await prof.solve_role(ctx.peer_id, comm.allowed_roles):
+                    lines.append(comm.name.capitalize())
+        return await ctx.send('\n'.join(lines) if len(lines) > 1 else answers['confirmations']['no_admin_commands'])
 
 
 def misc_setup():

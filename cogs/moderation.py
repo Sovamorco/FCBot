@@ -253,14 +253,6 @@ class Moderation(Cog):
         res = [(k, albums[k]) for k in sorted(albums, key=lambda x: (albums[x], x))]
         return await ctx.send(answers['confirmations']['arts_count'] + '\n'.join([f'{art[0]} - {art[1]}' for art in res]))
 
-    @command(name='помощь', aliases=['команды'], allowed_roles=True,
-             usage='помощь [команда]', help='Если ты читаешь это сообщение, то, думаю, ты понимаешь для чего эта команда')
-    async def help(self, ctx, *, comm=''):
-        if not comm:
-            return await ctx.send('Список команд (это временная помощь, не волнуйтесь):\n' + '\n'.join([comm.name for comm in sorted(fcbot.commands, key=lambda x: x.name)]))
-        res = command_converter(comm)
-        return await ctx.send(answers['confirmations']['help'].format(res.name, ctx.prefix, res.usage, res.help))
-
     @command(name='пред', aliases=['варн', 'предупреждение'], allowed_roles=True, usage='пред <id>',
              help='Команда для выдачи предупреждения пользователю')
     async def warning(self, ctx, target: IDConverter()):
