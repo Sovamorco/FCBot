@@ -30,7 +30,9 @@ class Profiles(Cog):
         lines += [answers['profiles']['profile']['role'].format(role.name.capitalize()) for role in roles] or \
                  [answers['profiles']['profile']['role'].format('Участник')]
         invited = await get_invite(uid)
+        plus, minus = await prof.get_rating()
         lines += [answers['profiles']['profile']['cookies'].format(prof.cookies),
+                  answers['profiles']['profile']['standing'].format(plus+minus, plus, minus),
                   answers['profiles']['profile']['invited'].format(invited.strftime('%d.%m.%Y')),
                   '', answers['profiles']['profile']['disclaimer']]
         return await ctx.send('\n'.join(lines))
@@ -304,15 +306,25 @@ class Profiles(Cog):
         res = await fcbot.upload_photo(ctx.peer_id, raw=m.create_png(encoding='utf-8'), format='png')
         return await ctx.send(attachment=res)
 
+    @staticmethod
+    async def change_standing(ctx, target, comment, positive):
+        if target == ctx.from_id:
+            return await ctx.send(answers['warnings']['cannot_rate_yourself'])
+        prof = await FCMember.load(ctx.from_id)
+        if not await prof.can_rate(target):
+            return await ctx.send(answers['warnings']['cannot_rate'])
+        await prof.rate(target, comment, positive)
+        return await ctx.send(answers['confirmations']['rating'].format(await fcbot.get_mention(target)))
+
     @command(name='статус -', aliases=['оценить -', 'дизлайк', 'понизить', 'минус'], usage='статус - <id> [комментарий]',
              help='Команда для понижения статуса пользователя')
     async def decrease_standing(self, ctx, target: IDConverter(), *, comment=''):
-        pass
+        await self.change_standing(ctx, target, comment, False)
 
     @command(name='статус +', aliases=['оценить +', 'лайк', 'повысить', 'плюс'], usage='статус + <id> [комментарий]',
              help='Команда для повышения статуса пользователя')
     async def increase_standing(self, ctx, target: IDConverter(), *, comment=''):
-        pass
+        await self.change_standing(ctx, target, comment, True)
 
 
 def profiles_setup():

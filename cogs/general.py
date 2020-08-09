@@ -159,6 +159,24 @@ class FCMember(AbstractSQLObject):
             await self.dump()
             await self.increase_used(comm.name)
 
+    async def can_rate(self, target):
+        tda = datetime.now() - timedelta(days=3)
+        res = await abstract_fetch(False, 'standings', ['sender', 'recipient'], [self.id, target, tda], raw_keys=f'datetime>%s')
+        return not res
+
+    async def rate(self, target, comment, positive):
+        await abstract_sql('INSERT INTO `standings` (sender, recipient, rating, comment) VALUES (%s, %s, %s, %s)', self.id, target, 1 if positive else -1, comment)
+
+    async def add_rating(self, amount):
+        await abstract_sql('INSERT INTO `standings` (recipient, rating) VALUES (%s, %s)', self.id, amount)
+
+    async def get_rating(self):
+        pos = await abstract_fetch(False, 'standings', ['recipient'], [self.id], ['SUM(rating)'], 'rating>0')
+        neg = await abstract_fetch(False, 'standings', ['recipient'], [self.id], ['SUM(rating)'], 'rating<0')
+        plus = pos['SUM(rating)'] if pos['SUM(rating)'] else 0
+        minus = neg['SUM(rating)'] if neg['SUM(rating)'] else 0
+        return plus, minus
+
 
 class Family:
     def __init__(self, mc, data=None):
@@ -445,11 +463,13 @@ class FCommand(Command):
         super().__init__(*args, **kwargs)
 
 
-async def log_message(dt, peer_id, user_id, msg):
+async def log_message(peer_id, user_id, msg, dt=None):
     msgj = dumps(msg)
-    dtf = dt.strftime('%Y-%m-%d %H:%M:%S')
     text = msg['text'] if msg['text'] else ''
-    await abstract_sql('INSERT INTO `messages` (datetime, chat, user, text, message) VALUES (%s, %s, %s, %s, %s)', dtf, peer_id, user_id, text, msgj)
+    if dt:
+        dtf = dt.strftime('%Y-%m-%d %H:%M:%S')
+        return await abstract_sql('INSERT INTO `messages` (datetime, chat, user, text, message) VALUES (%s, %s, %s, %s, %s)', dtf, peer_id, user_id, text, msgj)
+    return await abstract_sql('INSERT INTO `messages` (chat, user, text, message) VALUES (%s, %s, %s, %s)', peer_id, user_id, text, msgj)
 
 
 async def log_error(msg, error):
@@ -616,12 +636,15 @@ async def cookie_solver(uid, amt):
     prof.cookies += amt
     await prof.dump()
     gen = bool(await fcbot.get_gender_end(uid))
-    return answers['confirmations']['fortune_wheel']['cookies'].format(await prof.get_mention(), answers['misc']['pronouns'][gen],
+    return answers['confirmations']['fortune_wheel']['general'].format(await prof.get_mention(), answers['misc']['pronouns'][gen],
                                                                        amt, sform(amt, 'печеньку'))
 
 
-async def status_solver(_, __):
-    return 'Тут должно быть сообщение о получении статуса, но, увы, я пока не сделал статус, так что и получить его нельзя'
+async def status_solver(uid, amt):
+    prof = await FCMember.load(uid)
+    await prof.add_rating(amt)
+    gen = bool(await fcbot.get_gender_end(uid))
+    return answers['confirmations']['fortune_wheel']['general'].format(await prof.get_mention(), answers['misc']['pronouns'][gen], amt, 'статуса')
 
 
 async def nothing_solver(uid, _):

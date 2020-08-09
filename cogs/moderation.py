@@ -68,7 +68,7 @@ class Moderation(Cog):
 
     @Cog.listener()
     async def on_message_new(self, msg):
-        await log_message(datetime.now(), msg.peer_id, msg.from_id, msg.original_data)
+        await log_message(msg.peer_id, msg.from_id, msg.original_data)
         if msg.peer_id in chatlist:
             try:
                 await add_invite(msg.from_id)
